@@ -10,4 +10,7 @@
    <FileRef
       location = "group:lunchws_manager.sh">
    </FileRef>
+   <FileRef
+      location = "group:README.md">
+   </FileRef>
 </Workspace>
