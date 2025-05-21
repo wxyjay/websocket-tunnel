@@ -11,7 +11,7 @@ Follow these steps to execute the commands in your terminal:
 1.  **Download the Installation Script**:
     Open your Linux terminal and use `wget` to download the latest installation script:
     ```bash
-    wget [https://raw.githubusercontent.com/wxyjay/websocket-tunnel/main/install.sh](https://raw.githubusercontent.com/wxyjay/websocket-tunnel/main/install.sh)
+    wget https://raw.githubusercontent.com/wxyjay/websocket-tunnel/main/install.sh
     ```
 
 2.  **Grant Execution Permissions**:
