@@ -4,9 +4,9 @@
 PYTHON_SCRIPT_URL="https://github.com/wxyjay/websocket-tunnel/raw/main/lunch_websocket.py"
 LUNCH_MANAGER_SCRIPT_URL="https://github.com/wxyjay/websocket-tunnel/raw/main/lunchws_manager.sh"
 INSTALL_DIR="/etc/lunchkit/lunch_websocket"
-SYSTEMD_SERVICE_FILE="/etc/systemd/system/lunch-websocket.service"
+TUNNEL_SERVICE_FILE="/etc/systemd/system/lunch-tunnel.service"
 UDPGW_SERVICE_FILE="/etc/systemd/system/badvpn-udpgw.service"
-PYTHON_BIN=$(command -v python3)  # Ensure python3 is available
+PYTHON_BIN=$(command -v python3)
 LUNCH_MANAGER_SCRIPT="lunchws_manager.sh"
 LUNCH_MANAGER_PATH="$INSTALL_DIR/$LUNCH_MANAGER_SCRIPT"
 LUNCH_MANAGER_LINK="/usr/local/bin/lunchws"
@@ -16,14 +16,13 @@ UDPGW_BIN="/usr/local/bin/badvpn-udpgw"
 install_required_packages() {
     echo "Installing required packages..."
     apt-get update
-    apt-get install -y python3-pip dos2unix wget git cmake build-essential
-    pip3 install --upgrade pip
-    pip3 install websocket-client  # Adjust with other required packages as needed
+    # Use apt to install python3-websocket instead of pip install
+    apt-get install -y python3-pip python3-websocket dos2unix wget git cmake build-essential
 }
 
 # Function to download Python proxy script using wget
 download_lunch_tunnel() {
-    echo "Downloading Python proxy script from $PYTHON_SCRIPT_URL..."
+    echo "Downloading Python Tunnel script from $PYTHON_SCRIPT_URL..."
     wget -O "$INSTALL_DIR/lunch_websocket.py" "$PYTHON_SCRIPT_URL"
 }
 
@@ -40,27 +39,25 @@ download_lunchws_manager() {
 convert_to_unix_line_endings() {
     local file="$1"
     echo "Converting $file to Unix line endings..."
-    dos2unix "$file"
+    dos2unix "$file" &>/dev/null
 }
 
 # Function to start systemd service
 start_systemd_service() {
-    echo "Starting lunch-websocket service..."
-    systemctl start lunch-websocket
-    systemctl status lunch-websocket --no-pager  # Optionally, show status after starting
+    echo "Starting lunch-tunnel service..."
+    systemctl start lunch-tunnel
     if systemctl is-active --quiet badvpn-udpgw; then
-        echo "Starting the udpgw service..."
+        echo "Starting badvpn-udpgw service..."
         systemctl start badvpn-udpgw
-        systemctl status badvpn-udpgw --no-pager
     fi
 }
 
-# Function to install systemd service
+# Function to install systemd service for the main tunnel
 install_tunnel_service() {
-    echo "Creating tunnel systemd service file..."
-    cat > "$SYSTEMD_SERVICE_FILE" <<EOF
+    echo "Creating Tunnel systemd service file..."
+    cat > "$TUNNEL_SERVICE_FILE" <<EOF
 [Unit]
-Description=Python Proxy Service
+Description=Python Tunnel Service
 After=network.target
 
 [Service]
@@ -72,10 +69,6 @@ Group=root
 [Install]
 WantedBy=multi-user.target
 EOF
-    echo "Reloading systemd daemon..."
-    systemctl daemon-reload
-    echo "Enabling lunch-websocket service..."
-    systemctl enable lunch-websocket
 }
 
 # Function to install udpgw
@@ -95,7 +88,7 @@ install_udpgw() {
     wait
     cp udpgw/badvpn-udpgw "$UDPGW_BIN"
     
-    echo "Creating the udpgw systemd service file..."
+    echo "Creating udpgw systemd service file..."
     cat > "$UDPGW_SERVICE_FILE" << ENDOFFILE
 [Unit]
 Description=UDP forwarding for badvpn-tun2socks
@@ -112,23 +105,23 @@ ENDOFFILE
     
     systemctl enable badvpn-udpgw
     systemctl start badvpn-udpgw
-    echo "Udpgw installation is completed, listen to the port: $udpgw_port"
+    echo "udpgw installation complete, listening on port: $udpgw_port"
     cd /
 }
 
 # Function to handle udpgw installation logic
 handle_udpgw_installation() {
-    read -p "Do I need to install udpgw? (y/N): " choice
+    read -p "Do you want to install udpgw? (y/N): " choice
     if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
-        read -p "Do you need to customize the udpgw port? (Default: 7300) (y/N): " port_choice
+        read -p "Do you want to set a custom udpgw port? (Default: 7300) (y/N): " port_choice
         local udpgw_port=7300
         if [[ "$port_choice" == "y" || "$port_choice" == "Y" ]]; then
-            read -p "Please enter udpgw port (1-65535): " custom_port
+            read -p "Please enter the udpgw port (1-65535): " custom_port
             if [[ "$custom_port" =~ ^[0-9]+$ && "$custom_port" -ge 1 && "$custom_port" -le 65535 ]]; then
                 udpgw_port=$custom_port
-                echo "The udpgw port will be set to $udpgw_port."
+                echo "udpgw port will be set to $udpgw_port."
             else
-                echo "Invalid port input. The default port 7300 will be used."
+                echo "Invalid port. Using default port 7300."
             fi
         fi
         install_udpgw "$udpgw_port"
@@ -139,10 +132,10 @@ handle_udpgw_installation() {
 display_banner() {
    cat << "EOF"
 *************************************************
-*                                               *
-*               Made by Lunch                   *
-*         Visit me on X: @LaunchMask            *
-*                                               *
+* *
+* Made by Lunch                 *
+* Visit me on X: @LaunchMask            *
+* *
 *************************************************
 EOF
     echo
@@ -152,47 +145,40 @@ EOF
 display_installation_summary() {
     echo "Installation completed successfully!"
     echo
-    echo "Installed lunch_websocket.py in: $INSTALL_DIR"
-    echo "Installed $LUNCH_MANAGER_SCRIPT in: $LUNCH_MANAGER_PATH"
-    echo "You can now manage the WebSocket service using 'lunchws menu' command."
+    echo "Tunnel script installed in: $INSTALL_DIR"
+    echo "$LUNCH_MANAGER_SCRIPT installed in: $LUNCH_MANAGER_PATH"
+    echo "You can now manage the service using the 'lunchws menu' command."
 }
 
 # Main function
 main() {
     display_banner
 
-    # Install required packages
     install_required_packages
 
-    # Check if python3 is available
     if [ -z "$PYTHON_BIN" ]; then
-        echo "Error: Python 3 is not installed or not found in PATH. Please install Python 3."
+        echo "Error: Python 3 not found. Please install Python 3 first."
         exit 1
     fi
 
-    # Create installation directory
     echo "Creating installation directory: $INSTALL_DIR"
     mkdir -p "$INSTALL_DIR"
 
-    # Download Python proxy script
     download_lunch_tunnel
-
-    # Download lunchws_manager.sh script
     download_lunchws_manager
-
-    # Install systemd service
     install_tunnel_service
     
-    # Ask and install udpgw
-    handle_udpgw_installation
-    # Reload again in case udpgw service was created
+    echo "Reloading systemd..."
     systemctl daemon-reload
+    echo "Enabling lunch-tunnel service..."
+    systemctl enable lunch-tunnel
+
+    handle_udpgw_installation
     
-    
-    # Start systemd service
+    systemctl daemon-reload
+
     start_systemd_service
 
-    # Display installation summary
     display_installation_summary
 }
 
