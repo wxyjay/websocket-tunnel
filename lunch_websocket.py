@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 import socket, threading, select, sys, getopt, time
 
-# Listen
+# Default Listen
 LISTENING_ADDR = '0.0.0.0'
-LISTENING_PORT = 8098  # Default port 8098
+LISTENING_PORT = 8098 # Default port if no argument is given
 
 # Pass
 PASS = ''
@@ -14,6 +14,8 @@ TIMEOUT = 60
 DEFAULT_HOST = '127.0.0.1:22'
 RESPONSE = 'HTTP/1.1 101 Switching Protocols\r\n\r\nContent-Length: 104857600000\r\n\r\n'
 
+# --- The rest of the script remains the same ---
+# (Server class, ConnectionHandler class, etc. are unchanged)
 class Server(threading.Thread):
     def __init__(self, host, port):
         threading.Thread.__init__(self)
@@ -125,7 +127,7 @@ class ConnectionHandler(threading.Thread):
 
             if hostPort != b'':
                 passwd = self.findHeader(self.client_buffer, b'X-Pass')
-                
+
                 if len(PASS) != 0 and passwd == PASS.encode('utf-8'):
                     self.method_CONNECT(hostPort)
                 elif len(PASS) != 0 and passwd != PASS.encode('utf-8'):
@@ -169,7 +171,8 @@ class ConnectionHandler(threading.Thread):
             if self.method=='CONNECT':
                 port = 443
             else:
-                port = LISTENING_PORT
+                # Use the global LISTENING_PORT for consistency if needed, though this context is for the target port
+                port = 80
 
         (soc_family, soc_type, proto, _, address) = socket.getaddrinfo(host.decode('utf-8'), port)[0]
 
@@ -219,46 +222,29 @@ class ConnectionHandler(threading.Thread):
             if error:
                 break
 
+if __name__ == '__main__':
+    # If a command-line argument is provided, use it as the port
+    if len(sys.argv) > 1:
+        try:
+            port_arg = int(sys.argv[1])
+            if 1 <= port_arg <= 65535:
+                LISTENING_PORT = port_arg
+            else:
+                print(f"Warning: Invalid port '{sys.argv[1]}'. Using default {LISTENING_PORT}.")
+        except ValueError:
+            print(f"Warning: Invalid port argument '{sys.argv[1]}'. Using default {LISTENING_PORT}.")
 
-def print_usage():
-    print('Usage: proxy.py -p <port>')
-    print('       proxy.py -b <bindAddr> -p <port>')
-    print('       proxy.py -b 0.0.0.0 -p 80')
-
-def parse_args(argv):
-    global LISTENING_ADDR
-    global LISTENING_PORT
-    
-    try:
-        opts, args = getopt.getopt(argv,"hb:p:",["bind=","port="])
-    except getopt.GetoptError:
-        print_usage()
-        sys.exit(2)
-    for opt, arg in opts:
-        if opt == '-h':
-            print_usage()
-            sys.exit()
-        elif opt in ("-b", "--bind"):
-            LISTENING_ADDR = arg
-        elif opt in ("-p", "--port"):
-            LISTENING_PORT = int(arg)
-
-
-def main(host=LISTENING_ADDR, port=LISTENING_PORT):
     print("\n:------- SSH over Websocket Tunnel by Lunch-------:\n")
-    print("Listening addr: " + LISTENING_ADDR)
-    print("Listening port: " + str(LISTENING_PORT) + "\n")
+    print(f"Listening addr: {LISTENING_ADDR}")
+    print(f"Listening port: {LISTENING_PORT}\n")
     print(":-------------------------:\n")
+    
     server = Server(LISTENING_ADDR, LISTENING_PORT)
     server.start()
-    while True:
-        try:
+    
+    try:
+        while True:
             time.sleep(2)
-        except KeyboardInterrupt:
-            print('Stopping...')
-            server.close()
-            break
-
-if __name__ == '__main__':
-    parse_args(sys.argv[1:])
-    main()
+    except KeyboardInterrupt:
+        print('Stopping...')
+        server.close()
